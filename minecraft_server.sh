@@ -53,8 +53,9 @@ abort(){
 	exit 1
 }
 warn(){
-	tput setaf 3 && tput bold
-		 	echo -n 'WARNING:'
+	[ $# -eq 0 ] && return 2
+	echo -en "${YELLOW}${BOLD}==> WARNING:${RESET} ${YELLOW}${@}\nAborting ...$RESET"
+	exit 1
 }
 # Readonly funcs
 for X in {out,abort}; do
@@ -63,64 +64,40 @@ done
 ### Make sure we're running bash, ksh, or zsh before we continue.
 case $BASH_VERSION in
 5.?.?*|4.?.?* )	: ;;
-3.?.?* )	tput setaf 3 && tput bold
-		 	echo -n 'WARNING:'
-		 	tput sgr0 && tput setaf 3
-		 	echo "`tput setaf 3`You are using an outdated version of bash. If possible, please use this script with Bash Version ≥ 4.0.0."
-		 	tput sgr0
-		 	;;
-2.?.?*|1.?.?* )	abort 'Your bash version is extremely outdated. To run this script, preferably use bash version ≥ 4.0.0, but only ≥ 3.0.0 is required.'
-				;;
-?* )	tput setaf 1 && tput bold
-		echo -n 'ERROR:'
-		tput sgr0 && tput setaf 1
-		echo ' Invalid bash version found in $BASH_VERSION. Are you running bash ? Make sure your environment variables have been set correctly, and that you haven'"'"'t put a fake bash executable in your $PATH. '
-	 	tput sgr0 
-	 	exit 1
-	 	;;
-* ) tput setaf 1 && tput bold
-	echo -n "ERROR:" 
-	tput sgr0 && tput setaf 1
-	echo "You arent running bash.`tput bold` Aborting ..."
-	tput sgr0
-	exit 1
-	;;
+3.?.?* ) warn "You are using an outdated version of bash. If possible, please use this script with Bash Version ≥ 4.0.0." ;;
+2.?.?*|1.?.?* )	abort 'Your bash version is extremely outdated. To run this script, preferably use bash version ≥ 4.0.0, but only ≥ 3.0.0 is required.' ;;
+?* ) abort '${BOLD}ERROR: ${RESET}${RED}Invalid bash version found in $BASH_VERSION. Are you running bash ? Make sure your environment variables have been set correctly.' ;;
+* ) abort "${BOLD}ERROR:${RESET}${RED}You aren't running bash." ;;
 esac
-# Readonly funcs
-for X in {out,abort}; do
-	readonly -f -- $X
-done
 ### OS checks
-# MacOS (really Darwin) check
+# OS check
 case $(sysctl -n kern.ostype) in
-Darwin ): ;;
-* ) echo "${RED}ERROR: You are not running MacOS.${RESET}" 
-	;;
+Darwin ) OS=0 ;;
+* )	warn "${RED}ERROR: You are not running MacOS.${RESET}" 
+	OS=1;;
 esac
 # 64-bit compat check
-VERSION=$(sw_vers -productVersion)
-if [[ $VERSION = 10.* ]]; then
-	TEN_VERSION=$(sw_vers -productVersion | tr -d '10.')
-	if [[ $VERSION ]]
-elif [[ $VERSION = 11.* ]]; then
-	:
-else
-	abort "ERROR: Your OS is not 64-bit compatible. \nAborting..." 
-fi
+case $OS in
+0 )	case $(sw_vers -productVersion) in
+	10.*)	VERSION=$(sw_vers -productVersion | tr -d '10.') 
+		# To-do: Make sure we're 10.7 or higher
+		;;
+	11.*)	: 
+		;;
+	* )	warn "Your OS is not 64-bit compatible. "
+		BIT=32 
+		;;
+	esac
+	;;
+1 ) :
+# To-do: Add linux 64-bit compat check
+;; 
+esac
 # Intel processor check
 case $(sysctl -n machdep.cpu.brand_string | grep Intel) in
 	Intel* ): ;;
-	* )	echo -e "ERROR: You are not using the Intel processor. Maybe you are running Arm or PowerPC. \nAborting..." 
-	;;
+	* )	warn "You are not using the Intel processor. Maybe you are running Arm or PowerPC." ;;
 esac
-###### Check for basic commands
-# Make sure we don't use user overrides
-command -p ls 1>/dev/null
-builtin pwd 1>/dev/null
-builtin echo 1>/dev/null
-command mkdir cool 1>/dev/null
-command touch hey 1>/dev/null
-command -p rm -r cool hey 1>/dev/null
 ###### Script
 ### Vars
 out "Welcome to Arthur's Minecraft Server Installer !"
@@ -132,3 +109,4 @@ while a=$((a + 1)); do
 		? ) true ;;
 	esac
 	echo "${GREEN}${BOLD}==> ${YELLOW}What server software would you like to use ?"
+done
