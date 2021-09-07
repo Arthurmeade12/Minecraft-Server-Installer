@@ -94,7 +94,7 @@ done
 # MacOS (really Darwin) check
 case $(sysctl -n kern.ostype) in
 Darwin ): ;;
-* ) abort "ERROR: You are not running MacOS." 
+* ) echo "${RED}ERROR: You are not running MacOS.${RESET}" 
 	;;
 esac
 # 64-bit compat check
