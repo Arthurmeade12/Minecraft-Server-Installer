@@ -21,6 +21,7 @@
 #  3. This notice may not be removed or altered from any source
 #  distribution.
 #############################################################################
+### CYGWIN IS NOT SUPPORTED.
 set -eu
 ### Vars
 SUDO=false
@@ -41,6 +42,7 @@ UNDERLINED=`tput smul`
 for X in {BLUE,BOLD,RESET,RED,WHITE,TEAL,PURPLE,SUDO,UNDERLINED}; do
 	readonly -- $X
 done
+# Funcs
 out(){
 	for X in "$@"; do
 		echo -en "${BLUE}${BOLD}==>${RESET} ${WHITE}${X} "
@@ -49,13 +51,23 @@ out(){
 }
 abort(){
 	[ $# -eq 0 ] && return 2
+	exit=true
+	while getopts 'n' 'exit'; do
+		case $exit in
+		n )	exit=false ;;
+		? ) : ;;
+		esac
+	done
 	echo -en "${RED}${BOLD}==> ${@}\nAborting ...$RESET"
-	exit 1
+	[[ $exit ]] && exit 1
 }
 warn(){
 	[ $# -eq 0 ] && return 2
 	echo -en "${YELLOW}${BOLD}==> WARNING:${RESET} ${YELLOW}${@}\nAborting ...$RESET"
 	exit 1
+}
+qq(){
+	echo -en "${GREEN}${BOLD}==> ${YELLOW}${@} ${RESET}"
 }
 # Readonly funcs
 for X in {out,abort}; do
@@ -72,25 +84,30 @@ esac
 ### OS checks
 # OS check
 case $(sysctl -n kern.ostype) in
-Darwin ) OS=0 ;;
+Darwin ) OS=$(uname -s) ;;
 * )	warn "${RED}ERROR: You are not running MacOS.${RESET}" 
-	OS=1;;
+	OS=Linux;;
 esac
 # 64-bit compat check
 case $OS in
-0 )	case $(sw_vers -productVersion) in
-	10.*)	VERSION=$(sw_vers -productVersion | tr -d '10.') 
-		# To-do: Make sure we're 10.7 or higher
+Darwin )	case $(sw_vers -productVersion) in
+			# Using sw_vers because we know we're on MacOS
+			10.*)	VERSION=$(uname -r | tr -d '.') 
+			# Using Darwin version 9.0 or higher (MacOSX 10.5 or higher)
+			if [[ $VERSION -le 89 ]] || [[ $VERSION -eq 811 ]]; then
+				BIT=64
+			else
+				abort "Your OS is not 64-bit compatible. "
+			fi
+			;;
+			11.*)	BIT=64
+			;;
+			* )	abort "Your OS is not 64-bit compatible. " ; BIT=32
+			;;
+			esac
 		;;
-	11.*)	: 
-		;;
-	* )	warn "Your OS is not 64-bit compatible. "
-		BIT=32 
-		;;
-	esac
-	;;
-1 ) :
-# To-do: Add linux 64-bit compat check
+Linux ) :
+	# To-do: Add linux 64-bit compat check
 ;; 
 esac
 # Intel processor check
@@ -98,6 +115,43 @@ case $(sysctl -n machdep.cpu.brand_string | grep Intel) in
 	Intel* ): ;;
 	* )	warn "You are not using the Intel processor. Maybe you are running Arm or PowerPC." ;;
 esac
+# Java check
+if /usr/libexec/java_home -h &>/dev/null && [[ $OS = 'Linux' ]] || [[ $OS = 'Darwin' ]]; then
+	# Java Home is preferable on MacOS so that we don't have the JRE GUI install request popup.
+	for x in {16..18}; do
+		if /usr/libexec/java_home -Fv ${x} 1>/dev/null; then
+			break
+		else
+			[[ $x -ne 18 ]] && continue
+		fi
+		# No java/outdated java macos
+	done
+else
+	if ! java -version 1>/dev/null; then
+		abort -n "ERROR: You have no java installed. ${RESET}${WHITE}Opening link in browser ..."
+		if ! which git; then
+			out "No git detected, opening link in browser to install ..."
+			open 'https://adoptium.net/releases.html?variant=openjdk16&jvmVariant=hotspot'
+			exit 1
+		fi
+		qq "Would you like this script to build a JDK (get java) for you ? (y/n) "
+		while a=$((a + 1)); do
+			if [[ $a -eq 5 ]]; then
+				echo # New line needed
+				abort "5 invalid answers / no answers for 5 minutes / a combination of both. "
+			fi
+			read -t 60 install_java
+			[[ $? -ge 128 ]] && continue
+			case $install_java in
+			y|n)	: ;;
+			* )	echo "${RED}${BOLD}Invalid answer.${RESET}"
+				qq "(y/n) " ;;
+			esac
+			break
+		done
+	fi
+fi
+
 ###### Script
 ### Vars
 out "Welcome to Arthur's Minecraft Server Installer !"
@@ -108,5 +162,5 @@ while a=$((a + 1)); do
 		5 )	abort "Aborting due to 5 invalid answers. " ;;
 		? ) true ;;
 	esac
-	echo "${GREEN}${BOLD}==> ${YELLOW}What server software would you like to use ?"
+	qq "What server software would you like to use ? (plugins|mods|vanilla|hybrid) "
 done
